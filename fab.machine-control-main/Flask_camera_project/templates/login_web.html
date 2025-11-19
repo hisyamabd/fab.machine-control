@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fabrication Machine Control — Live Camera Demo</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+  :root {
+    --primary: #0d6efd;
+    --danger: #dc3545;
+    --success: #198754;
+    --muted: #6c757d;
+  }
+
+  body { background:#f6f8fb; font-family:Inter, system-ui, Arial, sans-serif; }
+  .page { max-width:1100px; margin:28px auto; }
+  .panel { background:#fff; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(10,20,40,0.06); }
+  .status-box { padding:14px;border-radius:8px;margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+  .op-ok { background: #f0fff4; border:1px solid #36b37e; }
+  .op-bad { background: #fff6f6; border:1px solid #e05a5a; }
+  #videoWrap { background:#000; border-radius:8px; overflow:hidden; min-height:320px; display:flex; align-items:center; justify-content:center; position: relative; }
+  #cameraStream { width:100%; height:auto; display:block; border-radius:8px; transform-origin: center; }
+  #videoFallback { color: #fff; text-align: center; padding: 20px; }
+  .camera-status { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; display: flex; align-items: center; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; animation: blink 1s infinite; }
+  .status-live { background: #28a745; }
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.5; } }
+  .btn-ripple { position:relative; overflow:hidden; }
+  .btn-ripple .ripple { position: absolute; border-radius: 50%; transform: scale(0); background: rgba(255,255,255,0.6); animation: ripple 600ms linear; pointer-events:none; }
+  @keyframes ripple { to { transform: scale(4); opacity:0; } }
+  .machine-on { box-shadow: 0 0 0 0 rgba(25, 135, 84, .4); animation: pulse 2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(25,135,84,0.6); } 70% { box-shadow: 0 0 0 10px rgba(25,135,84,0); } 100% { box-shadow: 0 0 0 0 rgba(25,135,84,0); } }
+  .hold-circle { width:46px; height:46px; border-radius:50%; display:inline-flex;align-items:center;justify-content:center; background:linear-gradient(180deg,#fff 0,#ffecec 100%); border:1px solid rgba(0,0,0,0.06); position:relative; overflow:hidden; }
+  .hold-progress { position:absolute; left:0; top:0; height:100%; width:0%; background:rgba(220,53,69,0.12); transition:width 0.05s linear; }
+  .log-area { height:150px; overflow:auto; background:#0b1220; color:#dbeafe; padding:10px; border-radius:6px; font-family:monospace; font-size:13px; }
+  .muted { color:var(--muted); }
+
+  /* USER INFO BANNER */
+  .user-info-banner {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  
+  .user-info-banner .user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+  }
+  
+  .user-info-banner .user-details {
+    flex: 1;
+  }
+  
+  .user-info-banner .user-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  
+  .user-info-banner .user-role {
+    font-size: 0.75rem;
+    opacity: 0.85;
+  }
+  
+  .btn-logout {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    transition: all 0.3s;
+  }
+  
+  .btn-logout:hover {
+    background: rgba(255,255,255,0.3);
+    color: white;
+  }
+
+  /* OPERATOR STATUS BANNER */
+  .operator-status-banner {
+    padding: 16px 28px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 1.15rem;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    text-align: center;
+    min-width: 340px;
+    letter-spacing: 0.6px;
+    display: inline-block;
+  }
+
+  .operator-status-banner.not-detected {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    color: #721c24;
+    border: 2px solid #e05a5a;
+  }
+
+  .operator-status-banner.detected {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+    border: 2px solid #28a745;
+    animation: pulse-success 2s infinite;
+    box-shadow: 0 4px 16px rgba(40, 167, 69, 0.3);
+  }
+
+  @keyframes pulse-success {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 12px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="panel">
+      <!-- HEADER WITH USER INFO -->
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="m-0">Fabrication Machine Control — Live Camera</h4>
+        
+        <!-- User Info -->
+        <div class="user-info-banner">
+          <div class="user-avatar">
+            <i class="fas fa-user"></i>
+          </div>
+          <div class="user-details">
+            <div class="user-name" id="userName">Loading...</div>
+            <div class="user-role" id="userRole">...</div>
+          </div>
+          <button class="btn btn-logout" id="btnLogout">
+            <i class="fas fa-sign-out-alt me-1"></i> Logout
+          </button>
+        </div>
+      </div>
+
+      <!-- OPERATOR STATUS BANNER -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div></div>
+        <div class="operator-status-banner not-detected">
+          Operator Status = NOT DETECTED
+        </div>
+      </div>
+      
+      <!-- MAIN CONTENT -->
+      <div class="row gy-3">
+        <div class="col-lg-7">
+          <div class="mb-3 panel">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong>Live Camera Feed</strong>
+              <div>
+                <button id="btnStartCamera" class="btn btn-sm btn-success me-2 btn-ripple">
+                  <i class="fas fa-video"></i> Start Camera
+                </button>
+                <button id="btnStopCamera" class="btn btn-sm btn-danger me-2 btn-ripple">
+                  <i class="fas fa-video-slash"></i> Stop Camera
+                </button>
+                <button id="btnSnap" class="btn btn-sm btn-primary btn-ripple">
+                  <i class="fas fa-camera"></i> Snapshot
+                </button>
+              </div>
+            </div>
+
+           <div id="videoWrap">
+              <img id="cameraStream" alt="Live Camera Feed" style="width: 100%; height: auto; display:none;">
+              <div id="videoFallback" class="text-center">
+                  <i class="fas fa-video fa-3x mb-3 text-muted"></i>
+                  <h5>Camera Not Active</h5>
+                  <p class="text-muted">Click "Start Camera" to begin video feed</p>
+              </div>
+              <div id="cameraStatus" class="camera-status" style="display:none;">
+                  <div class="status-dot status-live"></div>
+                  <span>LIVE</span>
+              </div>
+           </div>
+
+            <div class="row mt-3">
+              <div class="col-md-6">
+                <label class="form-label small">Zoom: <span id="zoomValue">100%</span></label>
+                <input id="zoom" type="range" min="100" max="300" class="form-range" value="100">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">Resolution</label>
+                <select id="resolution" class="form-select form-select-sm">
+                  <option value="640x480">640 x 480</option>
+                  <option value="1280x720" selected>1280 x 720 (HD)</option>
+                  <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div id="opStatus" class="status-box op-bad mb-2">
+            <div>
+              <div class="small muted">Status Operator</div>
+              <div><strong id="opText">TIDAK TERDETEKSI</strong></div>
+              <div class="small muted" id="opName" style="display:none;">Nama: <span id="opNameValue"></span></div>
+            </div>
+            <div>
+              <button id="btnToggleOp" class="btn btn-sm btn-outline-secondary btn-ripple">Test Toggle</button>
+            </div>
+          </div>
+
+          <div id="machineBox" class="status-box" style="background:#fff7ed;border:1px solid #ffd89b;">
+            <div>
+              <div class="small muted">Status Mesin</div>
+              <div><strong id="machineText">MATI</strong></div>
+              <div class="muted small">Runtime: <span id="runtime">0 s</span></div>
+            </div>
+            <div class="d-flex flex-column align-items-end">
+              <div class="mb-2">
+                <button id="btnStart" class="btn btn-success btn-ripple">Nyalakan</button>
+                <button id="btnStop" class="btn btn-danger btn-ripple">Matikan</button>
+              </div>
+              <div class="d-flex gap-2 align-items-center">
+                <div class="hold-circle" id="estopWrap" title="Tekan dan tahan 1s untuk Emergency Stop">
+                  <div class="hold-progress" id="estopProgress"></div>
+                  <button id="btnEStop" class="btn btn-link p-0" style="font-weight:bold;color:var(--danger)">E</button>
+                </div>
+                <small class="muted">Emergency Stop (hold)</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <strong>Activity Log</strong>
+            <div id="log" class="log-area mt-2"></div>
+            <div class="mt-2 d-flex gap-2">
+              <button id="btnClear" class="btn btn-sm btn-outline-secondary btn-ripple">Clear</button>
+              <button id="btnExport" class="btn btn-sm btn-outline-success btn-ripple">Export</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+console.log("🚀 JavaScript loaded!");
+
+let operatorDetected = false;
+let machineRunning = false;
+let runtime = 0;
+let runtimeTimer = null;
+
+const FLASK_URL = 'http://127.0.0.1:5000';
+const VIDEO_FEED_URL = FLASK_URL + '/video_feed';
+
+document.addEventListener('DOMContentLoaded', function () {
+    console.log("✅ DOM ready");
+
+    // Check session first
+    checkSession();
+
+    const opText = document.getElementById("opText");
+    const opStatus = document.getElementById("opStatus");
+    const opName = document.getElementById("opName");
+    const opNameValue = document.getElementById("opNameValue");
+    const btnToggleOp = document.getElementById("btnToggleOp");
+    const btnStart = document.getElementById("btnStart");
+    const btnStop = document.getElementById("btnStop");
+    const machineText = document.getElementById("machineText");
+    const machineBox = document.getElementById("machineBox");
+    const runtimeEl = document.getElementById("runtime");
+    const btnEStop = document.getElementById("btnEStop");
+    const estopProgress = document.getElementById("estopProgress");
+    const logArea = document.getElementById("log");
+    const btnClear = document.getElementById("btnClear");
+    const btnExport = document.getElementById("btnExport");
+    const btnStartCamera = document.getElementById("btnStartCamera");
+    const btnStopCamera = document.getElementById("btnStopCamera");
+    const btnSnap = document.getElementById("btnSnap");
+    const cameraStream = document.getElementById("cameraStream");
+    const videoFallback = document.getElementById("videoFallback");
+    const cameraStatus = document.getElementById("cameraStatus");
+    const zoomSlider = document.getElementById("zoom");
+    const zoomValue = document.getElementById("zoomValue");
+    const btnLogout = document.getElementById("btnLogout");
+    const userName = document.getElementById("userName");
+    const userRole = document.getElementById("userRole");
+
+    let operatorStatusInterval = null;
+
+    // Check session and load user info
+    function checkSession() {
+        fetch(FLASK_URL + '/check_session')
+            .then(resp => {
+                if (!resp.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+                return resp.json();
+            })
+            .then(data => {
+                if (data && data.logged_in) {
+                    userName.textContent = data.name || data.username;
+                    userRole.textContent = data.role || 'User';
+                    addLog(`👋 Selamat datang, ${data.name}!`);
+                } else {
+                    window.location.href = '/login';
+                }
+            })
+            .catch(() => {
+                window.location.href = '/login';
+            });
+    }
+
+    // Logout handler
+    btnLogout.addEventListener('click', () => {
+        if (confirm('Apakah Anda yakin ingin logout?')) {
+            addLog('👋 Logging out...');
+            
+            fetch(FLASK_URL + '/logout', { method: 'POST' })
+                .then(() => {
+                    window.location.href = '/login';
+                })
+                .catch(() => {
+                    window.location.href = '/login';
+                });
+        }
+    });
+
+    function addLog(msg) {
+        const time = new Date().toLocaleTimeString();
+        const line = document.createElement("div");
+        line.textContent = `[${time}] ${msg}`;
+        logArea.appendChild(line);
+        logArea.scrollTop = logArea.scrollHeight;
+        console.log(msg);
+    }
+
+    document.querySelectorAll(".btn-ripple").forEach(btn => {
+        btn.addEventListener("click", function (e) {
+            const circle = document.createElement("span");
+            const diameter = Math.max(this.clientWidth, this.clientHeight);
+            const rect = this.getBoundingClientRect();
+            circle.style.width = circle.style.height = `${diameter}px`;
+            circle.style.left = `${e.clientX - rect.left - diameter / 2}px`;
+            circle.style.top = `${e.clientY - rect.top - diameter / 2}px`;
+            circle.classList.add("ripple");
+            const ripple = this.getElementsByClassName("ripple")[0];
+            if (ripple) ripple.remove();
+            this.appendChild(circle);
+        });
+    });
+
+    function setStreamActive(isActive) {
+        if (isActive) {
+            cameraStream.src = VIDEO_FEED_URL + '?t=' + Date.now();
+            cameraStream.style.display = 'block';
+            videoFallback.style.display = 'none';
+            cameraStatus.style.display = 'flex';
+        } else {
+            cameraStream.src = "";
+            cameraStream.style.display = 'none';
+            videoFallback.style.display = 'block';
+            cameraStatus.style.display = 'none';
+        }
+    }
+
+    function updateOperatorFromServer(detected, name) {
+        const prevDetected = operatorDetected;
+        operatorDetected = detected;
+
+        const operatorBanner = document.querySelector('.operator-status-banner');
+
+        if (operatorDetected) {
+            opStatus.classList.remove("op-bad");
+            opStatus.classList.add("op-ok");
+            opText.textContent = "TERDETEKSI";
+            
+            if (name && name !== "Unknown") {
+                opName.style.display = 'block';
+                opNameValue.textContent = name;
+            } else {
+                opName.style.display = 'none';
+            }
+
+            if (operatorBanner) {
+                operatorBanner.textContent = "Operator Status = OPERATOR-DETECTED";
+                operatorBanner.classList.remove("not-detected");
+                operatorBanner.classList.add("detected");
+            }
+
+            if (!prevDetected) {
+                const nama = name && name !== "Unknown" ? name : "Operator";
+                addLog(`✅ Operator ${nama} terdeteksi!`);
+            }
+        } else {
+            opStatus.classList.remove("op-ok");
+            opStatus.classList.add("op-bad");
+            opText.textContent = "TIDAK TERDETEKSI";
+            opName.style.display = 'none';
+
+            if (operatorBanner) {
+                operatorBanner.textContent = "Operator Status = NOT DETECTED";
+                operatorBanner.classList.remove("detected");
+                operatorBanner.classList.add("not-detected");
+            }
+
+            if (prevDetected) {
+                addLog("⚠️ Operator meninggalkan area!");
+                if (machineRunning) {
+                    stopMachine();
+                    addLog("🛑 Mesin dimatikan otomatis.");
+                }
+            }
+        }
+    }
+
+    function pollOperatorStatus() {
+        const url = FLASK_URL + '/operator_status';
+        
+        fetch(url)
+            .then(resp => {
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return resp.json();
+            })
+            .then(data => {
+                console.log("📦 Operator status:", data);
+                updateOperatorFromServer(data.detected, data.name);
+            })
+            .catch(error => {
+                console.error("❌ Poll error:", error);
+            });
+    }
+
+    function startOperatorPolling() {
+        if (operatorStatusInterval) {
+            console.log("⚠️ Polling already active");
+            return;
+        }
+        console.log("🔄 Start polling...");
+        pollOperatorStatus();
+        operatorStatusInterval = setInterval(pollOperatorStatus, 1000);
+        addLog("🔄 Monitoring status operator aktif");
+    }
+
+    function stopOperatorPolling() {
+        if (!operatorStatusInterval) return;
+        console.log("⏹️ Stop polling");
+        clearInterval(operatorStatusInterval);
+        operatorStatusInterval = null;
+        updateOperatorFromServer(false, null);
+        addLog("⏹️ Monitoring status operator dihentikan");
+    }
+
+    btnStartCamera.addEventListener("click", () => {
+        const cameraID = 0;
+        addLog("ℹ️ Memulai kamera...");
+
+        fetch(FLASK_URL + '/start_monitoring', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ camera_id: cameraID })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server error');
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                setStreamActive(true);
+                startOperatorPolling();
+                addLog(`✅ Kamera aktif`);
+            } else {
+                addLog(`⚠️ ${data.message}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addLog("❌ Gagal start kamera");
+            alert("Pastikan Flask berjalan!");
+        });
+    });
+
+    btnStopCamera.addEventListener("click", () => {
+        addLog("ℹ️ Menghentikan kamera...");
+
+        fetch(FLASK_URL + '/stop_monitoring', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server error');
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                setStreamActive(false);
+                stopOperatorPolling();
+                addLog(`🛑 Kamera dimatikan`);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addLog("❌ Gagal stop");
+        });
+    });
+
+    btnToggleOp.addEventListener("click", () => {
+        updateOperatorFromServer(!operatorDetected, "Test Manual");
+    });
+
+    function startMachine() {
+        if (machineRunning) return;
+        machineRunning = true;
+        machineText.textContent = "MENYALA";
+        machineBox.classList.add("machine-on");
+        addLog("🟢 Mesin ON");
+        runtimeTimer = setInterval(() => {
+            runtime++;
+            runtimeEl.textContent = runtime + " s";
+        }, 1000);
+    }
+
+    function stopMachine() {
+        if (!machineRunning) return;
+        machineRunning = false;
+        machineText.textContent = "MATI";
+        machineBox.classList.remove("machine-on");
+        addLog("🔴 Mesin OFF");
+        clearInterval(runtimeTimer);
+        runtimeTimer = null;
+    }
+
+    btnStart.addEventListener("click", () => {
+        if (!operatorDetected) {
+            addLog("⚠️ Operator belum terdeteksi!");
+            alert("Operator belum terdeteksi!");
+            return;
+        }
+        startMachine();
+    });
+
+    btnStop.addEventListener("click", stopMachine);
+
+    let holdInterval;
+    btnEStop.addEventListener("mousedown", () => {
+        let progress = 0;
+        estopProgress.style.width = "0%";
+        holdInterval = setInterval(() => {
+            progress += 5;
+            estopProgress.style.width = progress + "%";
+            if (progress >= 100) {
+                clearInterval(holdInterval);
+                stopMachine();
+                addLog("🚨 E-STOP!");
+                alert("EMERGENCY STOP!");
+            }
+        }, 50);
+    });
+    btnEStop.addEventListener("mouseup", () => clearInterval(holdInterval));
+    btnEStop.addEventListener("mouseleave", () => clearInterval(holdInterval));
+
+    btnClear.addEventListener("click", () => {
+        logArea.innerHTML = "";
+        addLog("Cleared");
+    });
+
+    btnExport.addEventListener("click", () => {
+        const logs = Array.from(logArea.children).map(el => el.textContent).join("\n");
+        const blob = new Blob([logs], { type: "text/plain" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "log.txt";
+        link.click();
+        addLog("Exported");
+    });
+
+    btnSnap.addEventListener("click", () => {
+        alert("Snapshot: Coming soon");
+    });
+
+    zoomSlider.addEventListener("input", () => {
+        const zoom = zoomSlider.value / 100;
+        cameraStream.style.transform = `scale(${zoom})`;
+        zoomValue.textContent = `${zoomSlider.value}%`;
+    });
+
+    setStreamActive(false);
+    updateOperatorFromServer(false, null);
+    addLog("🚀 Ready");
+});
+  </script>
+</body>
+</html>

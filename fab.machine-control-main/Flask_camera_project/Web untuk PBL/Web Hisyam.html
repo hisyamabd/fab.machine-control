@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fabrication Machine Control — Live Camera Demo</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- CSS custom -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  <div class="page container-fluid px-2 px-md-3">
+    <div class="panel">
+
+      <!-- HEADER + BANNER -->
+      <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2 mb-3">
+        <h4 class="m-0 text-wrap">Fabrication Machine Control — Live Camera</h4>
+        <!-- Banner Status Operator -->
+        <div class="operator-status-banner not-detected text-center w-100 w-md-auto">
+          Operator Status = NOT DETECTED
+        </div>
+      </div>
+
+      <!-- GRID UTAMA -->
+      <div class="row gy-3">
+        <!-- KOLOM KIRI: KAMERA -->
+        <div class="col-12 col-lg-7 order-1 order-lg-1">
+          <div class="mb-3 panel">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <strong>Live Camera Feed</strong>
+              <div class="d-flex flex-wrap gap-2">
+                <button id="btnStartCamera" class="btn btn-sm btn-success btn-ripple">
+                  <i class="fas fa-video"></i> Start
+                </button>
+                <button id="btnStopCamera" class="btn btn-sm btn-danger btn-ripple">
+                  <i class="fas fa-video-slash"></i> Stop
+                </button>
+                <button id="btnSnap" class="btn btn-sm btn-primary btn-ripple">
+                  <i class="fas fa-camera"></i> Snapshot
+                </button>
+              </div>
+            </div>
+
+            <div id="videoWrap">
+              <!-- Stream dari Flask -->
+              <img id="cameraStream" alt="Live Camera Feed"
+                   style="width: 100%; height: auto; display:none;">
+              <div id="videoFallback" class="text-center">
+                <i class="fas fa-video fa-3x mb-3 text-muted"></i>
+                <h5>Camera Not Active</h5>
+                <p class="text-muted mb-0">Tap "Start" untuk memulai video</p>
+              </div>
+              <div id="cameraStatus" class="camera-status" style="display:none;">
+                <div class="status-dot status-live"></div>
+                <span>LIVE</span>
+              </div>
+            </div>
+
+            <div class="row mt-3 g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label small">Zoom: <span id="zoomValue">100%</span></label>
+                <input id="zoom" type="range" min="100" max="300" class="form-range" value="100">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">Resolution</label>
+                <select id="resolution" class="form-select form-select-sm">
+                  <option value="640x480">640 x 480</option>
+                  <option value="1280x720" selected>1280 x 720 (HD)</option>
+                  <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KOLOM KANAN: STATUS + MESIN + LOG -->
+        <div class="col-12 col-lg-5 order-2 order-lg-2">
+          <!-- Status Operator kecil -->
+          <div id="opStatus" class="status-box op-bad mb-2">
+            <div>
+              <div class="small muted">Status Operator</div>
+              <div><strong id="opText">TIDAK TERDETEKSI</strong></div>
+              <div class="small muted" id="opName" style="display:none;">
+                Nama: <span id="opNameValue"></span>
+              </div>
+            </div>
+            <div>
+              <!-- tombol test manual -->
+              <button id="btnToggleOp"
+                      class="btn btn-sm btn-outline-secondary btn-ripple">
+                Test Toggle
+              </button>
+            </div>
+          </div>
+
+          <!-- Status Mesin -->
+          <div id="machineBox" class="status-box mb-3"
+               style="background:#fff7ed;border:1px solid #ffd89b;">
+            <div>
+              <div class="small muted">Status Mesin</div>
+              <div><strong id="machineText">MATI</strong></div>
+              <div class="muted small">Runtime: <span id="runtime">0 s</span></div>
+            </div>
+            <div class="d-flex flex-column align-items-end">
+              <div class="mb-2 d-flex flex-wrap gap-2 justify-content-end">
+                <button id="btnStart" class="btn btn-success btn-ripple">Nyalakan</button>
+                <button id="btnStop" class="btn btn-danger btn-ripple">Matikan</button>
+              </div>
+              <div class="d-flex gap-2 align-items-center">
+                <div class="hold-circle" id="estopWrap"
+                     title="Tekan dan tahan 1s untuk Emergency Stop">
+                  <div class="hold-progress" id="estopProgress"></div>
+                  <button id="btnEStop" class="btn btn-link p-0"
+                          style="font-weight:bold;color:var(--danger)">E</button>
+                </div>
+                <small class="muted">Emergency Stop (hold)</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="panel">
+            <strong>Activity Log</strong>
+            <div id="log" class="log-area mt-2"></div>
+            <div class="mt-2 d-flex gap-2 flex-wrap">
+              <button id="btnClear" class="btn btn-sm btn-outline-secondary btn-ripple">
+                Clear
+              </button>
+              <button id="btnExport" class="btn btn-sm btn-outline-success btn-ripple">
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
+      </div> <!-- end row -->
+    </div> <!-- end panel -->
+  </div> <!-- end page -->
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- JS inline (boleh disatukan di main.js jika mau) -->
+  <script>
+    // JS Anda yang sudah ada bisa dipakai apa adanya,
+    // cukup pastikan FLASK_URL = window.location.origin
+    // (seperti di main.js) agar bisa diakses dari HP.
+  </script>
+</body>
+</html>
